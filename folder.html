@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>フォルダー内メール一覧</title>
+  <link rel="stylesheet" href="./css/style.css">
+
+  <!-- 戻るボタン（1回だけ） -->
+  <script type="module">
+    import { insertBackButton } from "./js/ui.js";
+    insertBackButton();
+  </script>
+
+  <!-- Gmail処理 -->
+  <script type="module" src="./js/gmail.js"></script>
+
+  <style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    td {
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1 id="folderTitle"></h1>
+  <p style="color:#888; font-size:13px;">● が付いているメールは未読です。クリックすると開いて既読になります。</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>企業名</th>
+        <th>件名</th>
+        <th>ステータス</th>
+      </tr>
+    </thead>
+    <tbody id="folderList"></tbody>
+  </table>
+
+  <!-- フォルダー内メール読み込み -->
+  <script type="module">
+    import { loadFolderMails } from "./js/gmail.js";
+
+    const params = new URLSearchParams(window.location.search);
+    const category = params.get("category");
+
+    document.getElementById("folderTitle").textContent = `${category} のメール`;
+
+    loadFolderMails(category);
+  </script>
+
+</body>
+</html>

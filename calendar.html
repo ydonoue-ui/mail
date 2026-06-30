@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>カレンダー</title>
+  <link rel="stylesheet" href="./css/style.css">
+
+    <!-- 戻るボタン（1回だけ） -->
+  <script type="module">
+    import { insertBackButton } from "./js/ui.js";
+    insertBackButton();
+  </script>
+  
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+
+    /* 横1列フォーム */
+    #addScheduleBox {
+      margin-bottom: 20px;
+    }
+
+    .schedule-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .schedule-row input,
+    .schedule-row select {
+      padding: 6px;
+    }
+
+    /* カレンダー */
+    #calendar table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    #calendar th, #calendar td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 80px; /* ← グリッド固定 */
+      vertical-align: top;
+      position: relative;
+    }
+
+    /* イベント色 */
+    .event {
+      font-size: 12px;
+      padding: 2px 4px;
+      margin-top: 4px;
+      border-radius: 4px;
+      display: inline-block;
+      color: #fff;
+    }
+
+    .interview { background: #2196f3; } /* 青 */
+    .deadline { background: #f44336; }  /* 赤 */
+    .briefing { background: #4caf50; }  /* 緑 */
+    .memo { background: #ffeb3b; color: #000; } /* 黄 */
+  </style>
+</head>
+
+<body>
+
+  <h1>カレンダー</h1>
+
+  <!-- 予定追加フォーム（横1列） -->
+  <!-- 予定追加フォーム（横1列） -->
+<div id="addScheduleBox">
+  <h3>予定を追加する</h3>
+
+  <div class="schedule-row">
+    <label>タイトル：</label>
+    <input type="text" id="titleInput">
+
+    <label>日付：</label>
+    <input type="date" id="dateInput">
+
+    <label>時間：</label>
+    <input type="time" id="timeInput">
+
+    <label>カテゴリ：</label>
+    <select id="categoryInput">
+      <option value="面接">面接</option>
+      <option value="締切">締切</option>
+      <option value="説明会">説明会</option>
+      <option value="インターン">インターン</option>
+      <option value="その他">その他</option>
+    </select>
+
+    <button id="addBtn">追加</button>
+  </div>
+</div>
+
+  <!-- カレンダー本体 -->
+  <div id="calendar"></div>
+
+  <script type="module" src="./js/calendar.js"></script>
+
+</body>
+</html>

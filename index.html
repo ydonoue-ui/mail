@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>就活メール管理アプリ</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <!-- Gmail処理・ログイン状態 -->
+  <script type="module" src="./js/gmail.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button { margin: 5px; padding: 10px; font-size: 16px; }
+
+    /* フォルダー一覧を4列グリッドにする */
+    .folder-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .folder-item {
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: #f9f9f9;
+      cursor: pointer;
+      text-align: center;
+      position: relative;
+    }
+
+    .folder-count {
+      position: absolute;
+      top: 4px;
+      left: 6px;
+      font-size: 12px;
+      color: #555;
+    }
+
+    #todayMailList div {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin: 5px 0;
+    }
+
+    /* お知らせエリア */
+    #upcomingNotice {
+      margin-top: 10px;
+    }
+
+    #upcomingNotice .notice-item {
+      border-left: 4px solid #4A90E2;
+      background: #f0f6ff;
+      padding: 8px 12px;
+      margin: 6px 0;
+      border-radius: 4px;
+    }
+
+    #upcomingNotice .notice-empty {
+      color: #888;
+    }
+
+    #logoutBtn {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>就活メール管理アプリ</h1>
+
+  <button id="loginBtn" onclick="loginWithGoogle()">Googleでログイン</button>
+  <button id="logoutBtn" onclick="logout()">ログアウト</button>
+  <button onclick="syncMails()">メール同期</button>
+
+  <h2>3日以内の予定お知らせ</h2>
+  <div id="upcomingNotice"></div>
+
+  <h2>フォルダー一覧</h2>
+  <div class="folder-grid" id="folderGrid"></div>
+
+  <h2>今日のメール</h2>
+  <button onclick="loadTodayMails()">今日のメールを表示</button>
+  <div id="todayMailList"></div>
+
+  <script>
+    window.openFolder = function(category) {
+      location.href = `folder.html?category=${category}`;
+    };
+  </script>
+
+  <!-- ログイン状態の初期反映 -->
+  <script type="module">
+    import { updateLoginUI } from "./js/auth.js";
+    updateLoginUI();
+  </script>
+
+  <!-- フォルダー一覧生成 -->
+  <script type="module">
+    import { getFolderCounts } from "./js/gmail.js";
+
+    const folders = [
+      "面接案内",
+      "面接日程調整",
+      "説明会案内",
+      "インターン案内",
+      "座談会案内",
+      "イベント案内",
+      "選考優遇案内",
+      "締切案内",
+      "エントリー案内",
+      "書類選考通過",
+      "書類選考不通過",
+      "適性検査・WEBテスト",
+      "課題提出",
+      "合格・内定",
+      "不採用",
+      "要返信",
+      "その他",
+      "カレンダーを見る"   // ← 追加！
+    ];
+
+    const counts = getFolderCounts();
+    const grid = document.getElementById("folderGrid");
+
+    folders.forEach(folder => {
+      const div = document.createElement("div");
+      div.className = "folder-item";
+
+      // カレンダーだけ別処理
+      if (folder === "カレンダーを見る") {
+        div.onclick = () => location.href = "calendar.html";
+        div.innerHTML = `
+          <div class="folder-count"></div>
+          <div>${folder}</div>
+        `;
+      } else {
+        const info = counts[folder] || { total: 0, unread: 0 };
+        const unreadLabel = info.unread > 0
+          ? `<span style="color:#E24A4A; font-weight:bold;">(未読${info.unread})</span>`
+          : "";
+        div.onclick = () => openFolder(folder);
+        div.innerHTML = `
+          <div class="folder-count">${info.total}件 ${unreadLabel}</div>
+          <div>${folder}</div>
+        `;
+      }
+
+      grid.appendChild(div);
+    });
+  </script>
+
+  <!-- 直近3日以内の予定お知らせ -->
+  <script type="module">
+    import { getUpcomingEvents } from "./js/calendar.js";
+
+    function escapeHtml(str) {
+      if (str == null) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    const noticeBox = document.getElementById("upcomingNotice");
+    const upcoming = getUpcomingEvents(3);
+
+    if (upcoming.length === 0) {
+      noticeBox.innerHTML = `<div class="notice-empty">3日以内の予定はありません</div>`;
+    } else {
+      noticeBox.innerHTML = "";
+      upcoming.forEach(ev => {
+        const d = new Date(ev.datetime);
+        const dateStr = d.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
+        const timeStr = d.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+
+        const div = document.createElement("div");
+        div.className = "notice-item";
+        div.innerHTML = `【${escapeHtml(ev.category)}】${dateStr} ${timeStr}〜 ${escapeHtml(ev.title)}`;
+        noticeBox.appendChild(div);
+      });
+    }
+  </script>
+
+</body>
+</html>

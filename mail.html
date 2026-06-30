@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>メール詳細</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #eee;
+      font-size: 13px;
+      margin-left: 8px;
+    }
+    .calendar-badge { background: #e6f0ff; color: #2a5cb8; }
+    .deadline-badge { background: #ffe9e9; color: #c0392b; }
+    .format-badge { background: #eefbe9; color: #2c7a39; }
+    .candidates { font-size: 13px; color: #555; margin-top: 4px; }
+  </style>
+  <script type="module">
+    import { insertBackButton } from "./js/ui.js";
+    insertBackButton();
+  </script>
+</head>
+<body>
+  <h1>メール詳細</h1>
+
+  <button onclick="history.back()" style="margin-bottom:20px;">← 戻る</button>
+
+  <h3>件名</h3>
+  <div id="subject"></div>
+
+  <h3>企業名</h3>
+  <div id="company"></div>
+
+  <h3>ステータス <span id="badges"></span></h3>
+  <div id="status"></div>
+  <div id="candidates" class="candidates"></div>
+
+  <h3>本文</h3>
+  <pre id="body" style="white-space: pre-wrap;"></pre>
+
+  <script type="module">
+    import { getMailById, markAsRead } from "./js/gmail.js";
+    import { loadEvents } from "./js/calendar.js";
+
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+
+    const mail = getMailById(id);
+
+    if (!mail) {
+      document.body.innerHTML += "<p>メールが見つかりませんでした。一覧からもう一度開いてください。</p>";
+    } else {
+      document.getElementById("subject").textContent = mail.subject;
+      document.getElementById("company").textContent = mail.company || mail.from;
+      document.getElementById("status").textContent = mail.category;
+
+      let badgesHtml = "";
+
+      if (mail.format) {
+        badgesHtml += `<span class="badge format-badge">${mail.format}</span>`;
+      }
+
+      const events = loadEvents();
+      const linkedEvent = events.find(ev => ev.sourceMailId === id);
+      if (linkedEvent) {
+        const d = new Date(linkedEvent.datetime);
+        const dateStr = d.toLocaleString("ja-JP", {
+          month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit"
+        });
+        badgesHtml += `<span class="badge calendar-badge">📅 カレンダー登録済み（${dateStr}〜）</span>`;
+      }
+
+      const linkedDeadline = events.find(ev => ev.sourceMailId === `${id}-deadline`);
+      if (linkedDeadline) {
+        const d = new Date(linkedDeadline.datetime);
+        const dateStr = d.toLocaleString("ja-JP", {
+          month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit"
+        });
+        badgesHtml += `<span class="badge deadline-badge">⏰ 締切: ${dateStr}</span>`;
+      }
+
+      document.getElementById("badges").innerHTML = badgesHtml;
+
+      // 本文中で見つかった日時候補をすべて表示（採用された日時の確認用）
+      if (mail.candidateDates && mail.candidateDates.length > 1) {
+        const list = mail.candidateDates
+          .map(d => new Date(d).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }))
+          .join(" / ");
+        document.getElementById("candidates").textContent = `本文中で見つかった日時候補: ${list}`;
+      }
+
+      document.getElementById("body").textContent = mail.body;
+
+      // 開いたら既読にする
+      markAsRead(id);
+    }
+  </script>
+</body>
+</html>
