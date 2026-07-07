@@ -1,0 +1,44 @@
+body {
+  font-family: sans-serif;
+  padding: 20px;
+}
+
+.mail-item {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+}
+
+#calendar td {
+  border: 1px solid #ccc;
+  padding: 4px;
+  height: 80px; /* ← 高さ固定 */
+  vertical-align: top;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 日付数字は上に固定 */
+.day-number {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-weight: bold;
+}
+
+/* イベントは数字の下に固定配置 */
+.event {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  padding: 2px 4px;
+  font-size: 12px;
+  border-radius: 4px;
+  color: #fff;
+}
+
+/* イベントの縦位置（数字の下から並べる） */
+.event:nth-child(2) { top: 24px; }
+.event:nth-child(3) { top: 44px; }
+.event:nth-child(4) { top: 64px; }

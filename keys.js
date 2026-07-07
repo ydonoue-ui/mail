@@ -1,0 +1,3 @@
+export const SUPABASE_URL = "https://gurgerxqkjvqzyxbfgjq.supabase.co";
+export const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd1cmdlcnhxa2p2cXp5eGJmZ2pxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3NDM5NTEsImV4cCI6MjA5ODMxOTk1MX0.rpmz8kOY737ZQkfvq_MnYOsC9pxtYKjXjfthqEvITJg";
+
