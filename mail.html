@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>メール詳細</title>
-  <link rel="stylesheet" href="./css/style.css">
   <style>
     body { font-family: sans-serif; padding: 20px; }
     .badge {
@@ -57,6 +56,14 @@
       document.getElementById("subject").textContent = mail.subject;
       document.getElementById("company").textContent = mail.company || mail.from;
       document.getElementById("status").textContent = mail.category;
+
+      // AI要約
+      if (mail.summary) {
+        const summaryEl = document.createElement("div");
+        summaryEl.style.cssText = "background:#f0f6ff; border-left:4px solid #4A90E2; padding:8px 12px; margin:8px 0; border-radius:4px; font-size:14px;";
+        summaryEl.textContent = `📝 ${mail.summary}`;
+        document.getElementById("candidates").before(summaryEl);
+      }
 
       let badgesHtml = "";
 
