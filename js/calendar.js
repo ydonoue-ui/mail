@@ -37,11 +37,11 @@ let currentMonth = new Date().getMonth();
 // カテゴリごとの色
 // ===============================
 const COLORS = {
-  "面接": "#4A90E2",
-  "締切": "#E24A4A",
-  "説明会": "#4AE26F",
-  "インターン": "#E2D84A",
-  "その他": "#888"
+  "面接": "#3E6FA0",
+  "締切": "#A63A2E",
+  "説明会": "#4F7A5B",
+  "インターン": "#A9821F",
+  "その他": "#857F70"
 };
 
 // ===============================
@@ -96,7 +96,7 @@ export function renderCalendar() {
       );
     });
 
-    let cell = `<td onclick="openDetail(${day})"><div>${day}</div>`;
+    let cell = `<td onclick="openDetail(${day})"><div class="day-number">${day}</div>`;
 
     const maxDisplay = 3;
     const displayEvents = dayEvents.slice(0, maxDisplay);

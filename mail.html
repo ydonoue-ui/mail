@@ -2,22 +2,9 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>メール詳細</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: #eee;
-      font-size: 13px;
-      margin-left: 8px;
-    }
-    .calendar-badge { background: #e6f0ff; color: #2a5cb8; }
-    .deadline-badge { background: #ffe9e9; color: #c0392b; }
-    .format-badge { background: #eefbe9; color: #2c7a39; }
-    .candidates { font-size: 13px; color: #555; margin-top: 4px; }
-  </style>
+  <link rel="stylesheet" href="./css/style.css">
   <script type="module">
     import { insertBackButton } from "./js/ui.js";
     insertBackButton();
@@ -39,15 +26,16 @@
   <div id="candidates" class="candidates"></div>
 
   <h3>本文</h3>
-  <pre id="body" style="white-space: pre-wrap;"></pre>
+  <pre id="body" style="white-space: pre-wrap; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow);"></pre>
 
   <script type="module">
-    import { getMailById, markAsRead } from "./js/gmail.js";
+    import { getMailById, markAsRead, refreshReadStatus } from "./js/gmail.js";
     import { loadEvents } from "./js/calendar.js";
 
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
 
+    await refreshReadStatus();
     const mail = getMailById(id);
 
     if (!mail) {
@@ -60,7 +48,7 @@
       // AI要約
       if (mail.summary) {
         const summaryEl = document.createElement("div");
-        summaryEl.style.cssText = "background:#f0f6ff; border-left:4px solid #4A90E2; padding:8px 12px; margin:8px 0; border-radius:4px; font-size:14px;";
+        summaryEl.style.cssText = "background:var(--slot-blue-soft); border-left:4px solid var(--slot-blue); padding:8px 12px; margin:8px 0; border-radius:4px; font-size:14px;";
         summaryEl.textContent = `📝 ${mail.summary}`;
         document.getElementById("candidates").before(summaryEl);
       }

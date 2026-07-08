@@ -2,77 +2,16 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>就活メール管理アプリ</title>
+  <link rel="stylesheet" href="./css/style.css">
 
   <!-- Gmail処理・ログイン状態 -->
   <script type="module" src="./js/gmail.js"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    button { margin: 5px; padding: 10px; font-size: 16px; }
-
-    .folder-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-top: 20px;
-    }
-
-    .folder-item {
-      padding: 12px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      background: #f9f9f9;
-      cursor: pointer;
-      text-align: center;
-      position: relative;
-    }
-
-    .folder-count {
-      position: absolute;
-      top: 4px;
-      left: 6px;
-      font-size: 12px;
-      color: #555;
-    }
-
-    #todayMailList div {
-      border: 1px solid #ccc;
-      padding: 10px;
-      margin: 5px 0;
-    }
-
-    #upcomingNotice { margin-top: 10px; }
-
-    #upcomingNotice .notice-item {
-      border-left: 4px solid #4A90E2;
-      background: #f0f6ff;
-      padding: 8px 12px;
-      margin: 6px 0;
-      border-radius: 4px;
-    }
-
-    #upcomingNotice .notice-empty { color: #888; }
-
     #logoutBtn { display: none; }
-
-    .sync-status {
-      margin: 8px 0;
-      font-size: 13px;
-      color: #666;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .sync-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      cursor: pointer;
-      user-select: none;
-    }
   </style>
 </head>
 
@@ -112,12 +51,13 @@
     import { updateLoginUI } from "./js/auth.js";
     import {
       loadTodayMails, startAutoSync, stopAutoSync,
-      isAutoSyncEnabled, getLastSyncedAt, syncMails
+      isAutoSyncEnabled, getLastSyncedAt, syncMails, refreshReadStatus
     } from "./js/gmail.js";
 
     updateLoginUI();
 
-    // ボタンを押さなくても今日のメールを自動表示
+    // 他の端末で既読にした分を先に反映してから、今日のメールを表示する
+    await refreshReadStatus();
     loadTodayMails();
 
     function formatLastSynced() {
@@ -163,28 +103,31 @@
 
   <!-- フォルダー一覧生成 -->
   <script type="module">
-    import { getFolderCounts } from "./js/gmail.js";
+    import { getFolderCounts, refreshReadStatus } from "./js/gmail.js";
 
-    const folders = [
-      "面接案内",
-      "面接日程調整",
-      "説明会案内",
-      "インターン案内",
-      "座談会案内",
-      "イベント案内",
-      "選考優遇案内",
-      "締切案内",
-      "エントリー案内",
-      "書類選考通過",
-      "書類選考不通過",
-      "適性検査・WEBテスト",
-      "課題提出",
-      "合格・内定",
-      "不採用",
-      "要返信",
-      "その他",
-      "カレンダーを見る"
-    ];
+    // フォルダー名 → 仕分けタブの色分類
+    const FOLDER_TYPES = {
+      "面接案内": "interview",
+      "面接日程調整": "interview",
+      "説明会案内": "briefing",
+      "インターン案内": "briefing",
+      "座談会案内": "briefing",
+      "イベント案内": "briefing",
+      "選考優遇案内": "other",
+      "締切案内": "deadline",
+      "エントリー案内": "deadline",
+      "書類選考通過": "other",
+      "書類選考不通過": "other",
+      "適性検査・WEBテスト": "deadline",
+      "課題提出": "deadline",
+      "合格・内定": "other",
+      "不採用": "other",
+      "要返信": "other",
+      "その他": "other",
+      "カレンダーを見る": "calendar"
+    };
+
+    const folders = Object.keys(FOLDER_TYPES);
 
     window.renderFolders = function () {
       const counts = getFolderCounts();
@@ -194,6 +137,7 @@
       folders.forEach(folder => {
         const div = document.createElement("div");
         div.className = "folder-item";
+        div.dataset.type = FOLDER_TYPES[folder];
 
         if (folder === "カレンダーを見る") {
           div.onclick = () => location.href = "calendar.html";
@@ -204,11 +148,11 @@
         } else {
           const info = counts[folder] || { total: 0, unread: 0 };
           const unreadLabel = info.unread > 0
-            ? `<span style="color:#E24A4A; font-weight:bold;">(未読${info.unread})</span>`
+            ? `<span class="unread-stamp">${info.unread}</span>`
             : "";
           div.onclick = () => openFolder(folder);
           div.innerHTML = `
-            <div class="folder-count">${info.total}件 ${unreadLabel}</div>
+            <div class="folder-count">${info.total}件${unreadLabel}</div>
             <div>${folder}</div>
           `;
         }
@@ -218,6 +162,7 @@
     };
 
     renderFolders();
+    refreshReadStatus().then(() => renderFolders());
   </script>
 
   <!-- 直近3日以内の予定お知らせ -->

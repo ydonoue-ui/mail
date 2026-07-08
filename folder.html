@@ -2,7 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>フォルダー内メール一覧</title>
+  <link rel="stylesheet" href="./css/style.css">
 
   <!-- 戻るボタン（1回だけ） -->
   <script type="module">
@@ -12,27 +14,12 @@
 
   <!-- Gmail処理 -->
   <script type="module" src="./js/gmail.js"></script>
-
-  <style>
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-    }
-    td {
-      cursor: pointer;
-    }
-  </style>
 </head>
 
 <body>
 
   <h1 id="folderTitle"></h1>
-  <p style="color:#888; font-size:13px;">● が付いているメールは未読です。クリックすると開いて既読になります。</p>
+  <p style="color:var(--ink-soft); font-size:13px;">● が付いているメールは未読です。クリックすると開いて既読になります。</p>
 
   <table>
     <thead>
@@ -47,13 +34,14 @@
 
   <!-- フォルダー内メール読み込み -->
   <script type="module">
-    import { loadFolderMails } from "./js/gmail.js";
+    import { loadFolderMails, refreshReadStatus } from "./js/gmail.js";
 
     const params = new URLSearchParams(window.location.search);
     const category = params.get("category");
 
     document.getElementById("folderTitle").textContent = `${category} のメール`;
 
+    await refreshReadStatus();
     loadFolderMails(category);
   </script>
 

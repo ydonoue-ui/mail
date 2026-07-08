@@ -3,6 +3,26 @@ import { updateLoginUI } from "./auth.js";
 import { addEventAuto } from "./calendar.js";
 
 // ===============================
+// 同時実行数を制限した並列処理
+// Gmail APIのレート制限に配慮しつつ、直列より大幅に高速化する
+// ===============================
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function runOne() {
+    while (nextIndex < items.length) {
+      const i = nextIndex++;
+      results[i] = await worker(items[i], i);
+    }
+  }
+
+  const runners = Array.from({ length: Math.min(limit, items.length) }, runOne);
+  await Promise.all(runners);
+  return results;
+}
+
+// ===============================
 // HTMLエスケープ（XSS対策）
 // ===============================
 function escapeHtml(str) {
@@ -474,9 +494,11 @@ export async function syncMails(options = {}) {
 
   const existingMails = JSON.parse(localStorage.getItem("savedMails") || "[]");
   const existingMap = new Map(existingMails.map(m => [m.id, m]));
-  const mails = [];
+  // 既読判定は「このブラウザが最後に見た状態」より「Supabase上の最新状態」を優先する
+  const readMap = await refreshReadStatus() || new Map();
 
-  for (const msg of data.messages) {
+  // メール詳細の取得・解析を1件ずつ待たず、同時に複数件処理する（同時実行数は6件まで）
+  const mails = await mapWithConcurrency(data.messages, 6, async (msg) => {
     const detailRes = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`,
       { headers: { Authorization: `Bearer ${token}` } }
@@ -497,6 +519,7 @@ export async function syncMails(options = {}) {
     const eventInfo    = pickEventDate(allDates, fullText, receivedDate);
     const deadlineInfo = pickDeadlineDate(allDates, fullText);
     const existing = existingMap.get(msg.id);
+    const read = readMap.has(msg.id) ? readMap.get(msg.id) : (existing ? !!existing.read : false);
 
     const mailObj = {
       id: msg.id,
@@ -504,10 +527,9 @@ export async function syncMails(options = {}) {
       eventDate:    eventInfo    ? eventInfo.date.toISOString()    : null,
       deadlineDate: deadlineInfo ? deadlineInfo.date.toISOString() : null,
       candidateDates: allDates.map(d => d.date.toISOString()),
-      read: existing ? !!existing.read : false
+      read
     };
 
-    mails.push(mailObj);
     await saveMail(mailObj);
 
     const calendarCategory = mapToCalendarCategory(category);
@@ -519,7 +541,9 @@ export async function syncMails(options = {}) {
       const deadlineTitle = `${company || "(企業名不明)"} 締切（${shortenCategory(category)}）`;
       addEventAuto(deadlineTitle, deadlineInfo.date, "締切", `${msg.id}-deadline`);
     }
-  }
+
+    return mailObj;
+  });
 
   localStorage.setItem("savedMails", JSON.stringify(mails));
   localStorage.setItem("lastSyncedAt", new Date().toISOString());
@@ -543,6 +567,33 @@ export async function saveMail(mail) {
     { onConflict: "gmail_id" }
   );
   if (error) console.error(error);
+}
+
+// ===============================
+// 既読状態をSupabaseから取り込む（端末間の食い違い対策）
+// localStorageは端末ごとに別物なので、表示前にSupabase側の
+// 最新のread状態をローカルキャッシュへ反映してから描画する
+// ===============================
+export async function refreshReadStatus() {
+  const { data, error } = await supabase.from("mails").select("gmail_id, read");
+  if (error) { console.error(error); return; }
+
+  const readMap = new Map(data.map(row => [row.gmail_id, !!row.read]));
+  const mails = JSON.parse(localStorage.getItem("savedMails") || "[]");
+  let changed = false;
+
+  mails.forEach(mail => {
+    if (readMap.has(mail.id)) {
+      const latestRead = readMap.get(mail.id);
+      if (mail.read !== latestRead) {
+        mail.read = latestRead;
+        changed = true;
+      }
+    }
+  });
+
+  if (changed) localStorage.setItem("savedMails", JSON.stringify(mails));
+  return readMap;
 }
 
 // ===============================
@@ -583,9 +634,10 @@ export function loadTodayMails() {
   if (!todayMails.length) { list.innerHTML = `<p style="color:#888;">今日届いたメールはありません</p>`; return; }
 
   todayMails.forEach(mail => {
-    const unreadMark = mail.read ? "" : `<span style="color:#E24A4A;">●</span> `;
+    const unreadMark = mail.read ? "" : `<span style="color:var(--seal);">●</span> `;
     const div = document.createElement("div");
-    div.style.cssText = `border:1px solid #ccc; padding:10px; margin:5px 0; cursor:pointer; font-weight:${mail.read ? "normal" : "bold"}`;
+    div.className = "mail-item";
+    div.style.fontWeight = mail.read ? "normal" : "bold";
     div.innerHTML = `
       ${unreadMark}<strong>${escapeHtml(mail.subject)}</strong><br>
       <span style="color:#555">${escapeHtml(mail.company || mail.from)}</span>
@@ -604,9 +656,9 @@ export function loadFolderMails(category) {
   const list = document.getElementById("folderList");
   list.innerHTML = "";
   JSON.parse(saved).filter(m => m.category === category).forEach(mail => {
-    const unreadMark = mail.read ? "" : `<span style="color:#E24A4A;">●</span> `;
+    const unreadMark = mail.read ? "" : `<span style="color:var(--seal);">●</span> `;
     const tr = document.createElement("tr");
-    tr.style.cssText = `cursor:pointer; font-weight:${mail.read ? "normal" : "bold"}`;
+    tr.style.fontWeight = mail.read ? "normal" : "bold";
     tr.innerHTML = `
       <td>${escapeHtml(mail.company || mail.from)}</td>
       <td>${unreadMark}${escapeHtml(mail.subject)}</td>
