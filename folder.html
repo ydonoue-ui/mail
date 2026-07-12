@@ -27,6 +27,7 @@
         <th>企業名</th>
         <th>件名</th>
         <th>ステータス</th>
+        <th>受信日時</th>
       </tr>
     </thead>
     <tbody id="folderList"></tbody>
@@ -41,8 +42,9 @@
 
     document.getElementById("folderTitle").textContent = `${category} のメール`;
 
-    await refreshReadStatus();
+    // まずキャッシュで即表示 → Supabaseの最新既読状態が届いたら差し替え
     loadFolderMails(category);
+    refreshReadStatus().then(() => loadFolderMails(category));
   </script>
 
 </body>

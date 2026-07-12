@@ -21,6 +21,9 @@
   <h3>企業名</h3>
   <div id="company"></div>
 
+  <h3>受信日時</h3>
+  <div id="receivedDate"></div>
+
   <h3>ステータス <span id="badges"></span></h3>
   <div id="status"></div>
   <div id="candidates" class="candidates"></div>
@@ -29,13 +32,12 @@
   <pre id="body" style="white-space: pre-wrap; background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow);"></pre>
 
   <script type="module">
-    import { getMailById, markAsRead, refreshReadStatus } from "./js/gmail.js";
+    import { getMailById, markAsRead } from "./js/gmail.js";
     import { loadEvents } from "./js/calendar.js";
 
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
 
-    await refreshReadStatus();
     const mail = getMailById(id);
 
     if (!mail) {
@@ -43,6 +45,9 @@
     } else {
       document.getElementById("subject").textContent = mail.subject;
       document.getElementById("company").textContent = mail.company || mail.from;
+      document.getElementById("receivedDate").textContent = mail.date
+        ? new Date(mail.date).toLocaleString("ja-JP", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
+        : "不明";
       document.getElementById("status").textContent = mail.category;
 
       // AI要約

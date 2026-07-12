@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>メール一覧</title>
+  <title>メール検索</title>
   <link rel="stylesheet" href="./css/style.css">
   <script type="module">
     import { insertBackButton } from "./js/ui.js";
@@ -11,7 +11,11 @@
   </script>
 </head>
 <body>
-  <h1>保存済みメール一覧</h1>
+  <h1>メール検索</h1>
+
+  <input type="text" id="searchInput" placeholder="企業名・件名・カテゴリで検索（スペース区切りでAND検索）"
+         style="width:100%; max-width:480px; padding:10px 14px; font-size:14px;">
+  <div id="searchSummary" style="margin:10px 0 4px; font-size:13px; color:var(--ink-soft);"></div>
 
   <div id="mailList"></div>
 

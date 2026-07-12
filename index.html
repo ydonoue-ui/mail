@@ -22,12 +22,11 @@
   <button id="loginBtn" onclick="loginWithGoogle()">Googleでログイン</button>
   <button id="logoutBtn" onclick="logout()">ログアウト</button>
   <button onclick="manualSync()">今すぐメール同期</button>
+  <button onclick="location.href='mails.html'">🔍 メールを検索</button>
+  <button onclick="runReclassify()">🔁 振り分けを再判定</button>
+  <button onclick="runRepairBodies()">🩹 本文の文字化けを修復</button>
 
   <div class="sync-status">
-    <label class="sync-toggle">
-      <input type="checkbox" id="autoSyncCheckbox">
-      自動更新（5分ごとにGmailをチェック）
-    </label>
     <span id="lastSyncedLabel"></span>
   </div>
 
@@ -46,19 +45,18 @@
     };
   </script>
 
-  <!-- ログイン状態・自動更新・今日のメールの初期化 -->
+  <!-- ログイン状態・今日のメールの初期化 -->
   <script type="module">
     import { updateLoginUI } from "./js/auth.js";
     import {
-      loadTodayMails, startAutoSync, stopAutoSync,
-      isAutoSyncEnabled, getLastSyncedAt, syncMails, refreshReadStatus
+      loadTodayMails, getLastSyncedAt, syncMails, refreshReadStatus, reclassifyAll, repairHtmlBodies
     } from "./js/gmail.js";
 
     updateLoginUI();
 
-    // 他の端末で既読にした分を先に反映してから、今日のメールを表示する
-    await refreshReadStatus();
+    // まずキャッシュで即表示 → Supabaseの最新既読状態が届いたら差し替え
     loadTodayMails();
+    refreshReadStatus().then(() => loadTodayMails());
 
     function formatLastSynced() {
       const t = getLastSyncedAt();
@@ -72,30 +70,33 @@
     }
     formatLastSynced();
 
-    const checkbox = document.getElementById("autoSyncCheckbox");
-    checkbox.checked = isAutoSyncEnabled();
-
-    if (checkbox.checked) startAutoSync(5);
-
-    checkbox.addEventListener("change", () => {
-      if (checkbox.checked) {
-        startAutoSync(5);
-      } else {
-        stopAutoSync();
-      }
-    });
-
-    // 自動更新でメールが同期されたら、最終更新時刻・フォルダー件数を再描画
-    window.addEventListener("mailsSynced", () => {
-      formatLastSynced();
-      renderFolders();
-    });
-
-    // 「今すぐメール同期」ボタン（通常通りアラートを出す）
+    // 「今すぐメール同期」ボタン
     window.manualSync = async function () {
       await syncMails();
       formatLastSynced();
       renderFolders();
+    };
+
+    // 「振り分けを再判定」ボタン（Gmail APIは叩かず、保存済み本文でカテゴリだけ再判定）
+    window.runReclassify = async function () {
+      const { total, changed } = await reclassifyAll();
+      renderFolders();
+      loadTodayMails();
+      alert(`${total}件中 ${changed}件のカテゴリを更新しました`);
+    };
+
+    // 「本文の文字化けを修復」ボタン（HTMLタグのまま保存されてしまった本文をGmailから取り直す）
+    window.runRepairBodies = async function () {
+      const { total, fixed, authError, stillBroken } = await repairHtmlBodies();
+      renderFolders();
+      loadTodayMails();
+      if (total === 0) {
+        alert("HTMLタグが混ざったままの本文は見つかりませんでした");
+      } else if (authError) {
+        alert(`Googleログインの有効期限が切れているようです。一度ログアウトして、再度ログインしてから試してください。（対象${total}件、修復0件）`);
+      } else {
+        alert(`対象${total}件中 ${fixed}件の本文を修復しました${stillBroken > 0 ? `（${stillBroken}件は修復後もHTMLが残っていました。開発者ツールのConsoleに詳細を出しています）` : ""}`);
+      }
     };
 
     window.renderFolders = renderFolders; // フォルダー描画スクリプトから呼べるように
