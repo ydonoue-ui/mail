@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登録企業</title>
+  <link rel="stylesheet" href="./css/style.css">
+  <script type="module">
+    import { insertBackButton } from "./js/ui.js";
+    insertBackButton();
+  </script>
+  <style>
+    #addCompanyForm {
+      display: flex;
+      gap: 8px;
+      margin: 14px 0 20px;
+      flex-wrap: wrap;
+    }
+    #companyNameInput {
+      flex: 1;
+      min-width: 200px;
+      padding: 9px 12px;
+      font-size: 14px;
+    }
+    #companyList {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .company-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 8px 7px 16px;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      font-size: 14px;
+      transition: transform 0.1s ease;
+    }
+    .company-chip:hover { transform: translateY(-2px); }
+    .company-chip-name { font-weight: 500; color: var(--navy-deep); }
+    .company-chip-count { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+    .company-chip-remove {
+      background: none;
+      border: none;
+      color: var(--ink-soft);
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 6px;
+      margin: 0;
+      cursor: pointer;
+      border-radius: 999px;
+    }
+    .company-chip-remove:hover { background: var(--seal-soft); color: var(--seal); }
+    #companyListEmpty {
+      color: var(--ink-soft);
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+    #selectedCompanyLabel {
+      font-size: 14px;
+      color: var(--ink-soft);
+      margin-bottom: 10px;
+      padding-left: 2px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>登録企業</h1>
+  <p style="color:var(--ink-soft); font-size:13px;">選考中・気になってる企業の名前を登録すると、その企業から来たメールだけをまとめて見れます。</p>
+
+  <form id="addCompanyForm">
+    <input type="text" id="companyNameInput" placeholder="企業名を入力（例：メルカリ）" required>
+    <button type="submit">＋ 登録</button>
+  </form>
+
+  <div id="companyListEmpty" style="display:none;">まだ企業が登録されてません。上のフォームから追加してください。</div>
+  <div id="companyList"></div>
+
+  <h2 id="selectedCompanyLabel">登録した企業をクリックすると、その企業からのメールがここに表示されます</h2>
+  <div id="companyMailResults"></div>
+
+  <script type="module" src="./js/companies.js"></script>
+
+</body>
+</html>

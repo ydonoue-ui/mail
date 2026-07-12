@@ -23,8 +23,8 @@
   <button id="logoutBtn" onclick="logout()">ログアウト</button>
   <button onclick="manualSync()">今すぐメール同期</button>
   <button onclick="location.href='mails.html'">🔍 メールを検索</button>
-  <button onclick="runReclassify()">🔁 振り分けを再判定</button>
-  <button onclick="runRepairBodies()">🩹 本文の文字化けを修復</button>
+  <button onclick="location.href='companies.html'">🏢 登録企業</button>
+  <button onclick="runSyncHealthCheck()">🩺 同期状況を確認</button>
 
   <div class="sync-status">
     <span id="lastSyncedLabel"></span>
@@ -49,7 +49,7 @@
   <script type="module">
     import { updateLoginUI } from "./js/auth.js";
     import {
-      loadTodayMails, getLastSyncedAt, syncMails, refreshReadStatus, reclassifyAll, repairHtmlBodies
+      loadTodayMails, getLastSyncedAt, syncMails, refreshReadStatus, getSyncHealthCheck
     } from "./js/gmail.js";
 
     updateLoginUI();
@@ -77,26 +77,26 @@
       renderFolders();
     };
 
-    // 「振り分けを再判定」ボタン（Gmail APIは叩かず、保存済み本文でカテゴリだけ再判定）
-    window.runReclassify = async function () {
-      const { total, changed } = await reclassifyAll();
-      renderFolders();
-      loadTodayMails();
-      alert(`${total}件中 ${changed}件のカテゴリを更新しました`);
-    };
-
-    // 「本文の文字化けを修復」ボタン（HTMLタグのまま保存されてしまった本文をGmailから取り直す）
-    window.runRepairBodies = async function () {
-      const { total, fixed, authError, stillBroken } = await repairHtmlBodies();
-      renderFolders();
-      loadTodayMails();
-      if (total === 0) {
-        alert("HTMLタグが混ざったままの本文は見つかりませんでした");
-      } else if (authError) {
-        alert(`Googleログインの有効期限が切れているようです。一度ログアウトして、再度ログインしてから試してください。（対象${total}件、修復0件）`);
-      } else {
-        alert(`対象${total}件中 ${fixed}件の本文を修復しました${stillBroken > 0 ? `（${stillBroken}件は修復後もHTMLが残っていました。開発者ツールのConsoleに詳細を出しています）` : ""}`);
+    // 「同期状況を確認」ボタン
+    window.runSyncHealthCheck = async function () {
+      const result = await getSyncHealthCheck();
+      if (!result) return;
+      if (result.error) {
+        alert("同期状況の確認に失敗しました。ログインし直してから試してください。");
+        return;
       }
+      const diff = result.gmailTotal - result.localTotal;
+      const capNote = !result.isFirstSyncDone
+        ? "\n（まだ一度も同期してません）"
+        : (result.localTotal >= 500
+            ? "\n※初回同期の上限500件に達しています。差分同期で少しずつ追いついていきます。"
+            : "");
+      alert(
+        `Gmail全体のメール数：${result.gmailTotal}件\n` +
+        `ローカルに保存済み：${result.localTotal}件\n` +
+        `差：${diff}件${capNote}\n\n` +
+        `※Gmail全体には就活と関係ないメールも全部含まれます。同期が正常なら「今すぐメール同期」を押すたびに差が縮まっていきます。`
+      );
     };
 
     window.renderFolders = renderFolders; // フォルダー描画スクリプトから呼べるように

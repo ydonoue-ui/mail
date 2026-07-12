@@ -30,6 +30,10 @@
 
 * { box-sizing: border-box; }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   font-family: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
   background: var(--paper);
@@ -38,6 +42,20 @@ body {
   max-width: 960px;
   margin: 0 auto;
   line-height: 1.7;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+}
+
+pre, code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-width: 100%;
+}
+
+a {
+  overflow-wrap: anywhere;
+  color: var(--slot-blue);
 }
 
 h1, h2, h3 {
@@ -76,7 +94,6 @@ h3 {
   color: var(--navy);
 }
 
-a { color: var(--slot-blue); }
 
 /* ------------------------------------------------------------
    ボタン

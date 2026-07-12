@@ -51,9 +51,32 @@ export async function loginWithGoogle() {
   const provider = google.accounts.oauth2.initTokenClient({
     client_id: "740838490341-lbk668eejtimanj49ck246dvcd6kr0ga.apps.googleusercontent.com",
     scope: "https://www.googleapis.com/auth/gmail.readonly",
-    callback: (tokenResponse) => {
+    callback: async (tokenResponse) => {
       localStorage.setItem("gmailToken", tokenResponse.access_token);
-      alert("ログイン成功！");
+
+      // 前回ログインしてたアカウントと違う場合、古いアカウントのデータが残らないようクリアする
+      try {
+        const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+          headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+        });
+        const profile = await res.json();
+        const currentEmail = profile.emailAddress;
+        const lastEmail = localStorage.getItem("loggedInAccount");
+
+        if (currentEmail && lastEmail && currentEmail !== lastEmail) {
+          localStorage.removeItem("savedMails");
+          localStorage.removeItem("lastSyncedAt");
+          localStorage.removeItem("lastSyncedMaxDate");
+          alert(`前回ログインしてた ${lastEmail} とは別のアカウント（${currentEmail}）でログインしました。\n古いアカウントのメールデータは削除したので、「今すぐメール同期」でこのアカウントのメールを取得し直してください。`);
+        } else {
+          alert("ログイン成功！");
+        }
+        if (currentEmail) localStorage.setItem("loggedInAccount", currentEmail);
+      } catch (e) {
+        console.error("アカウント確認に失敗しました:", e);
+        alert("ログイン成功！");
+      }
+
       updateLoginUI();
     }
   });
@@ -106,10 +129,27 @@ const NON_JOB_DISTRACTOR_PATTERNS = [
   /Quoraダイジェスト|からの回答|もっと読む:/
 ];
 
+// 大学の学生ポータル（UNIPA等）からの事務連絡に特有のマーカー。
+// 「不採用」「応募」など就活っぽい単語が偶然含まれていても、
+// これらが複数マッチする場合は大学事務からの掲示（奨学金・履修登録など）である可能性が非常に高いので、
+// contextHitsの数に関わらず就活メールとして扱わない。
+const UNIVERSITY_PORTAL_PATTERNS = [
+  /UNIPA/i,
+  /掲示差出人/,
+  /学生センター/,
+  /奨学金/,
+  /学業基準/,
+  /履修登録|授業料|休学|復学|奨学生/
+];
+
 function isJobRelated(text) {
   const distractorHits = NON_JOB_DISTRACTOR_PATTERNS.filter(re => re.test(text)).length;
   const contextHits = JOB_CONTEXT_PATTERNS.filter(re => re.test(text)).length;
   if (distractorHits > 0 && contextHits <= 1) return false;
+
+  const portalHits = UNIVERSITY_PORTAL_PATTERNS.filter(re => re.test(text)).length;
+  if (portalHits >= 2) return false;
+
   return contextHits >= 1;
 }
 
@@ -671,135 +711,58 @@ async function fetchAllMessageIds(token, cap = 500) {
 }
 
 // 2回目以降の同期：前回より新しいメールだけを取得（差分同期）
-async function fetchMessageIdsSince(token, sinceIso) {
+async function fetchMessageIdsSince(token, sinceIso, cap = 1000) {
   // 境界ちょうどで漏れないよう60秒分バッファを持たせる
   const sinceEpoch = Math.floor(new Date(sinceIso).getTime() / 1000) - 60;
 
-  const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
-  url.searchParams.set("q", `after:${sinceEpoch}`);
-  url.searchParams.set("maxResults", "100");
+  let messages = [];
+  let pageToken = null;
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  const data = await res.json();
-  return data.messages || [];
+  do {
+    const url = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+    url.searchParams.set("q", `after:${sinceEpoch}`);
+    url.searchParams.set("maxResults", "100");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await res.json();
+
+    if (data.messages) messages = messages.concat(data.messages);
+    pageToken = data.nextPageToken;
+  } while (pageToken && messages.length < cap);
+
+  return messages.slice(0, cap);
 }
 
 // ===============================
-// 既存メールの再分類（Gmail APIは叩かず、保存済みの本文で判定し直す）
-// カテゴリ判定ロジックを更新した後、過去に取り込み済みのメールにも
-// 新しいロジックを反映させたいときに使う
+// 同期状況の見える化
+// Gmail側の総メール数と、ローカルに保存できてる件数を突き合わせて、
+// 同期がちゃんと進んでるか目視確認できるようにする
 // ===============================
-// ===============================
-// 本文がHTMLタグのまま保存されてしまったメールを修復する
-// （単一パートのHTMLメールでタグ除去が効いてなかったバグの影響を受けた分）
-// ===============================
-function looksLikeRawHtml(body) {
-  return /<\/?(div|span|html|body|head|table|tr|td|a|p|br)\b/i.test(body || "");
-}
-
-// 本文が短すぎる（プレビュー用の一言だけ保存されてしまった）ものも修復対象にする
-function looksTooShort(body) {
-  return !!body && body.trim().length > 0 && body.trim().length < 30;
-}
-
-// 空行だらけになってしまっている本文（改行つぶしが効いてなかった当時のバグの影響）も対象にする
-function hasExcessiveBlankLines(body) {
-  if (!body) return false;
-  const blankLines = body.split("\n").filter(l => l.trim() === "").length;
-  return blankLines > 10;
-}
-
-function needsRepair(body) {
-  return looksLikeRawHtml(body) || looksTooShort(body) || hasExcessiveBlankLines(body);
-}
-
-export async function repairHtmlBodies() {
+export async function getSyncHealthCheck() {
   const token = localStorage.getItem("gmailToken");
-  if (!token) { alert("Googleログインしてください"); return { total: 0, fixed: 0, authError: false, stillBroken: 0 }; }
+  if (!token) { alert("Googleログインしてください"); return null; }
 
-  const saved = JSON.parse(localStorage.getItem("savedMails") || "[]");
-  const targets = saved.filter(m => needsRepair(m.body));
-  if (targets.length === 0) return { total: 0, fixed: 0, authError: false, stillBroken: 0 };
-
-  let fixed = 0;
-  let authError = false;
-  let stillBroken = 0;
-
-  await mapWithConcurrency(targets, 6, async (mail) => {
-    try {
-      const detailRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${mail.id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const detailData = await detailRes.json();
-
-      if (!detailRes.ok || detailData.error) {
-        console.error("Gmail API エラー:", mail.id, detailData.error || detailRes.status);
-        if (detailRes.status === 401 || detailRes.status === 403) authError = true;
-        return;
-      }
-      if (!detailData.payload) {
-        console.error("payloadが取得できませんでした:", mail.id, detailData);
-        return;
-      }
-
-      const newBody = extractBody(detailData.payload);
-
-      if (!newBody) {
-        console.warn("本文が空でした:", mail.id, mail.subject);
-        return;
-      }
-
-      if (looksLikeRawHtml(newBody)) {
-        console.warn("修復後もHTMLタグが残っています:", mail.id, mail.subject, newBody.slice(0, 200));
-        stillBroken++;
-        return;
-      }
-
-      if (newBody === mail.body) {
-        // 取り直しても中身が変わらなかった（本当にこれだけの内容のメールだった可能性）
-        return;
-      }
-
-      mail.body = newBody;
-      // 本文が直ったので、カテゴリ・開催形式も直った本文で判定し直す
-      const fullText = normalizeText((mail.subject || "") + "\n" + newBody);
-      const subjectNorm = normalizeText(mail.subject || "");
-      mail.category = detectCategory(fullText, subjectNorm).category;
-      mail.format = detectFormat(fullText);
-      await saveMail(mail);
-      fixed++;
-    } catch (e) {
-      console.error("repairHtmlBodies 予期しないエラー:", mail.id, e);
-    }
+  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: `Bearer ${token}` }
   });
+  const profile = await res.json();
 
-  localStorage.setItem("savedMails", JSON.stringify(saved));
-  return { total: targets.length, fixed, authError, stillBroken };
-}
-
-export async function reclassifyAll() {
-  const saved = JSON.parse(localStorage.getItem("savedMails") || "[]");
-  if (saved.length === 0) return { total: 0, changed: 0 };
-
-  let changed = 0;
-
-  for (const mail of saved) {
-    const fullText = normalizeText((mail.subject || "") + "\n" + (mail.body || ""));
-    const subjectNorm = normalizeText(mail.subject || "");
-    const { category } = detectCategory(fullText, subjectNorm);
-    const format = detectFormat(fullText);
-
-    if (mail.category !== category || mail.format !== format) {
-      mail.category = category;
-      mail.format = format;
-      changed++;
-      await saveMail(mail);
-    }
+  if (!res.ok || profile.error) {
+    console.error("プロフィール取得エラー:", profile.error || res.status);
+    return { error: true };
   }
 
-  localStorage.setItem("savedMails", JSON.stringify(saved));
-  return { total: saved.length, changed };
+  const saved = JSON.parse(localStorage.getItem("savedMails") || "[]");
+  const lastSyncedMaxDate = localStorage.getItem("lastSyncedMaxDate");
+
+  return {
+    error: false,
+    gmailTotal: profile.messagesTotal,
+    localTotal: saved.length,
+    lastSyncedMaxDate,
+    isFirstSyncDone: !!lastSyncedMaxDate
+  };
 }
 
 export async function syncMails(options = {}) {
@@ -1037,8 +1000,7 @@ export function getLastSyncedAt()   { return localStorage.getItem("lastSyncedAt"
 // ===============================
 window.loginWithGoogle  = loginWithGoogle;
 window.syncMails        = syncMails;
-window.reclassifyAll    = reclassifyAll;
-window.repairHtmlBodies = repairHtmlBodies;
+window.getSyncHealthCheck = getSyncHealthCheck;
 window.loadTodayMails   = loadTodayMails;
 window.loadFolderMails  = loadFolderMails;
 window.getFolderCounts  = getFolderCounts;
