@@ -94,7 +94,7 @@ export function renderCalendar() {
         d.getMonth() === currentMonth &&
         d.getDate() === day
       );
-    });
+    }).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
 
     let cell = `<td onclick="openDetail(${day})"><div class="day-number">${day}</div>`;
 
@@ -163,7 +163,7 @@ window.openDetail = function(day) {
       d.getMonth() === currentMonth &&
       d.getDate() === day
     );
-  });
+  }).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
 
   if (dayEvents.length === 0) return;
 
@@ -255,6 +255,19 @@ export function addEventAuto(title, datetime, category, sourceMailId = null) {
   events.push(newEvent);
   saveEvents(events);
   return newEvent;
+}
+
+// ===============================
+// メール解析からの自動登録を取り消す
+// 再分類などでカテゴリ・日時判定が変わり、以前登録した予定が
+// もう不要になった場合に、そのゴミ予定をカレンダーから消すために使う
+// ===============================
+export function removeEventBySourceMailId(sourceMailId) {
+  const events = loadEvents();
+  const filtered = events.filter(ev => ev.sourceMailId !== sourceMailId);
+  if (filtered.length === events.length) return false;
+  saveEvents(filtered);
+  return true;
 }
 
 // ===============================

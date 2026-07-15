@@ -234,6 +234,14 @@ input[type="text"], input[type="date"], input[type="time"], select {
   border-radius: 6px;
   font-size: 14px;
 }
+#upcomingNotice .notice-item-clickable {
+  cursor: pointer;
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+#upcomingNotice .notice-item-clickable:hover {
+  filter: brightness(0.97);
+  transform: translateX(2px);
+}
 #upcomingNotice .notice-empty {
   color: var(--ink-soft);
   font-size: 14px;
