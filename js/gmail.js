@@ -2,6 +2,10 @@ import { supabase } from "./supabase.js";
 import { updateLoginUI } from "./auth.js";
 import { addEventAuto, removeEventBySourceMailId } from "./calendar.js";
 
+// Googleトークンが切れている（401/403）ことを示す専用のエラー型。
+// 「新着0件」と「認証エラーで取得自体に失敗した」を区別するために使う。
+class GmailAuthError extends Error {}
+
 // ===============================
 // 同時実行数を制限した並列処理
 // Gmail APIのレート制限に配慮しつつ、直列より大幅に高速化する
@@ -274,7 +278,6 @@ const CATEGORY_RULES = [
       { re: /社員座談会/, weight: 7 },
       { re: /先輩社員と話す/, weight: 6 },
       { re: /若手社員との/, weight: 6 }
-
     ]
   },
   {
@@ -317,12 +320,7 @@ const CATEGORY_RULES = [
       { re: /特別選考ルート/, weight: 8 },
       { re: /一部選考.{0,5}免除/, weight: 7 },
       { re: /優遇ルートへご案内/, weight: 8 },
-      { re: /特別ルート/, weight: 6 },
-      { re: /特別選考/, weight: 7 },
-      { re: /特別選考のご案内/, weight: 8 },
-      { re: /特別選考枠/, weight: 7 },
-      { re: /特別選考ルートのご案内/, weight: 8 },
-      { re:/スカウト|逆求人/, weight: 6 }
+      { re: /特別ルート/, weight: 6 }
     ]
   },
   {
@@ -352,14 +350,7 @@ const CATEGORY_RULES = [
       { re: /エントリーをお願い/, weight: 8 },
       { re: /選考.{0,5}エントリー/, weight: 7 },
       { re: /エントリーいただけます/, weight: 6 },
-      { re: /エントリーをお待ちして/, weight: 6 },
-      { re: /エントリー受付期間/, weight: 6 },
-      { re: /エントリー受付終了/, weight: 6 },
-      { re: /エントリー受付開始のお知らせ/, weight: 7},
-      { re: /エントリー受付中のお知らせ/, weight: 7},
-      { re: /エントリー受付終了のお知らせ/, weight: 7},
-      { re: /エントリー受付期間のお知らせ/, weight: 7},
-
+      { re: /エントリーをお待ちして/, weight: 6 }
     ]
   },
   {
@@ -401,23 +392,7 @@ const CATEGORY_RULES = [
       { re: /イベントに参加/, weight: 15 },
       { re: /キャリアイベント/, weight: 6 },
       { re: /就活サポートイベント/, weight: 6 },
-      { re: /相談会/, weight: 5 },
-      { re: /就活サポート/, weight: 10 },
-      { re: /ツアー/, weight:10 },
-      { re: /交流会/, weight: 5 },
-      { re: /合同イベント/, weight: 6 },
-      { re: /オンラインイベント/, weight: 6 },
-      { re: /会社見学会/, weight: 6 },
-      { re: /会社訪問/, weight: 6 },
-      { re: /特別求人紹介フェア/, weight: 6 },
-      { re: /就活フェア/, weight: 6 },
-      { re: /就活相談会/, weight: 6 },
-      { re: /就活セミナー/, weight: 6 },
-      { re: /就活交流会/, weight: 6 },
-      { re: /就活ツアー/, weight: 6 },
-      { re: /就活見学会/, weight: 6 },
-      { re: /研修会/, weight: 10 },
-
+      { re: /相談会/, weight: 5 }
     ]
   },
   {
@@ -504,12 +479,18 @@ function extractCompany(fromHeader, body) {
 
   const looksInvalid = !name ||
     /^(no-?reply|info|mailer|support|notification|system)/i.test(name) ||
-    /@/.test(name);
+    /@/.test(name) ||
+    // 「メール配信専用」「事務局」等の送信代行・プラットフォーム名は、企業名そのものではないため
+    // 本文中の「株式会社〜」等から実際の企業名を探すフォールバックに回す
+    /(メール配信専用|配信専用|事務局|サポート|カスタマーサポート|マイナビ|リクナビ|キャリタス|ワンキャリア|dodaキャンパス|システムより|運営事務局)/i.test(name);
 
   if (looksInvalid && body) {
-    const sigMatch = body.match(
-      /(株式会社[^\s\n　、。]{1,20}|[^\s\n　、。]{1,20}株式会社|合同会社[^\s\n　、。]{1,20}|[^\s\n　、。]{1,20}合同会社)/
-    );
+    // 会社名は基本的に漢字・カタカナ・英数字で構成され、直後の「からのご案内です」等の
+    // ひらがな主体の文章まで一緒に拾ってしまわないよう、ひらがなの手前で打ち切る
+    const nameChar = "A-Za-z0-9ァ-ヶーa-zA-Z一-龠";
+    const sigMatch = body.match(new RegExp(
+      `(株式会社[${nameChar}]{1,20}|[${nameChar}]{1,20}株式会社|合同会社[${nameChar}]{1,20}|[${nameChar}]{1,20}合同会社)`
+    ));
     if (sigMatch) return sigMatch[1];
   }
 
@@ -815,6 +796,14 @@ async function fetchAllMessageIds(token, cap = 500) {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
 
+    if (!res.ok || data.error) {
+      if (res.status === 401 || res.status === 403) {
+        throw new GmailAuthError(data.error?.message || `HTTP ${res.status}`);
+      }
+      console.error("メッセージ一覧取得エラー:", data.error || res.status);
+      break;
+    }
+
     if (data.messages) messages = messages.concat(data.messages);
     pageToken = data.nextPageToken;
   } while (pageToken && messages.length < cap);
@@ -838,6 +827,14 @@ async function fetchMessageIdsSince(token, sinceIso, cap = 1000) {
 
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     const data = await res.json();
+
+    if (!res.ok || data.error) {
+      if (res.status === 401 || res.status === 403) {
+        throw new GmailAuthError(data.error?.message || `HTTP ${res.status}`);
+      }
+      console.error("メッセージ一覧取得エラー:", data.error || res.status);
+      break;
+    }
 
     if (data.messages) messages = messages.concat(data.messages);
     pageToken = data.nextPageToken;
@@ -1064,9 +1061,19 @@ export async function syncMails(options = {}) {
   const lastSyncedMaxDate = localStorage.getItem("lastSyncedMaxDate");
   const isFirstSync = !lastSyncedMaxDate;
 
-  const messageRefs = isFirstSync
-    ? await fetchAllMessageIds(token)
-    : await fetchMessageIdsSince(token, lastSyncedMaxDate);
+  let messageRefs;
+  try {
+    messageRefs = isFirstSync
+      ? await fetchAllMessageIds(token)
+      : await fetchMessageIdsSince(token, lastSyncedMaxDate);
+  } catch (e) {
+    if (e instanceof GmailAuthError) {
+      console.error("Gmail認証エラー（メッセージ一覧取得）:", e.message);
+      if (!silent) alert("Googleログインの有効期限が切れています。一度ログアウトして、もう一度ログインし直してください。");
+      return;
+    }
+    throw e;
+  }
 
   const existingMails = JSON.parse(localStorage.getItem("savedMails") || "[]");
   const existingMap = new Map(existingMails.map(m => [m.id, m]));
@@ -1081,45 +1088,76 @@ export async function syncMails(options = {}) {
   // 既読判定は「このブラウザが最後に見た状態」より「Supabase上の最新状態」を優先する
   const readMap = await refreshReadStatus() || new Map();
 
+  // 同期中にトークンが切れた場合に検知するためのフラグ
+  let authErrorDuringFetch = false;
+
   // メール詳細の取得・解析を1件ずつ待たず、同時に複数件処理する（同時実行数は6件まで）
-  const fetchedMails = await mapWithConcurrency(messageRefs, 6, async (msg) => {
-    const detailRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    const detailData = await detailRes.json();
-    const headers = detailData.payload.headers;
-    const subject    = headers.find(h => h.name === "Subject")?.value || "";
-    const fromHeader = headers.find(h => h.name === "From")?.value || "";
-    const body = extractBody(detailData.payload);
-    const receivedDate = new Date(Number(detailData.internalDate));
-    const date = receivedDate.toISOString();
-    const fullText = normalizeText(subject + "\n" + body);
+  // 1件のエラーで同期処理全体が丸ごと止まってしまわないよう、失敗した1件はスキップして続行する
+  const fetchedMailsRaw = await mapWithConcurrency(messageRefs, 6, async (msg) => {
+    try {
+      const detailRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const detailData = await detailRes.json();
 
-    const company  = extractCompany(fromHeader, body);
-    const { category } = detectCategory(fullText, normalizeText(subject));
-    const format   = detectFormat(fullText);
-    const allDates = extractAllDateTimes(fullText, receivedDate);
-    const eventInfo    = pickEventDate(allDates, fullText, receivedDate);
-    const deadlineInfo = pickDeadlineDate(allDates, fullText);
-    const existing = existingMap.get(msg.id);
-    const read = readMap.has(msg.id) ? readMap.get(msg.id) : (existing ? !!existing.read : false);
+      if (!detailRes.ok || detailData.error || !detailData.payload) {
+        if (detailRes.status === 401 || detailRes.status === 403) authErrorDuringFetch = true;
+        console.error("メール詳細取得エラー:", msg.id, detailData.error || detailRes.status);
+        return null;
+      }
 
-    const mailObj = {
-      id: msg.id,
-      subject, from: fromHeader, company, body, category, format, date,
-      eventDate:    eventInfo    ? eventInfo.date.toISOString()    : null,
-      deadlineDate: deadlineInfo ? deadlineInfo.date.toISOString() : null,
-      candidateDates: allDates.map(d => d.date.toISOString()),
-      read
-    };
+      const headers = detailData.payload.headers;
+      const subject    = headers.find(h => h.name === "Subject")?.value || "";
+      const fromHeader = headers.find(h => h.name === "From")?.value || "";
+      const toHeader   = headers.find(h => h.name === "To")?.value || "";
+      // 自分が送った側のメール（マイナビ経由のエントリー送信など）は、
+      // Fromが自分自身になるため、企業名の手がかりはToの方から取る
+      const labelIds = detailData.labelIds || [];
+      const isSent = labelIds.includes("SENT");
+      const body = extractBody(detailData.payload);
+      const receivedDate = new Date(Number(detailData.internalDate));
+      const date = receivedDate.toISOString();
+      const fullText = normalizeText(subject + "\n" + body);
 
-    await saveMail(mailObj);
+      const company  = extractCompany(isSent ? toHeader : fromHeader, body);
+      const { category } = detectCategory(fullText, normalizeText(subject));
+      const format   = detectFormat(fullText);
+      const allDates = extractAllDateTimes(fullText, receivedDate);
+      const eventInfo    = pickEventDate(allDates, fullText, receivedDate);
+      const deadlineInfo = pickDeadlineDate(allDates, fullText);
+      const existing = existingMap.get(msg.id);
+      // 送信済みメールには「未読」の概念が無いため、常に既読として扱う
+      const read = isSent ? true : (readMap.has(msg.id) ? readMap.get(msg.id) : (existing ? !!existing.read : false));
 
-    registerMailToCalendar(msg.id, company, category, format, eventInfo, deadlineInfo);
+      const mailObj = {
+        id: msg.id,
+        subject, from: fromHeader, company, body, category, format, date,
+        isSent,
+        eventDate:    eventInfo    ? eventInfo.date.toISOString()    : null,
+        deadlineDate: deadlineInfo ? deadlineInfo.date.toISOString() : null,
+        candidateDates: allDates.map(d => d.date.toISOString()),
+        read
+      };
 
-    return mailObj;
+      await saveMail(mailObj);
+
+      registerMailToCalendar(msg.id, company, category, format, eventInfo, deadlineInfo);
+
+      return mailObj;
+    } catch (e) {
+      console.error("メール処理中に予期しないエラー:", msg.id, e);
+      return null;
+    }
   });
+
+  // 取得に失敗した分（認証エラー等でスキップされたもの）を除外
+  const fetchedMails = fetchedMailsRaw.filter(Boolean);
+
+  if (authErrorDuringFetch) {
+    console.error("同期中にGoogle認証エラーが発生しました。一部のメールが取得できていません。");
+    if (!silent) alert("同期の途中でGoogleログインの有効期限が切れました。取得できなかったメールがあります。お手数ですが、ログアウトして再ログインしてから、もう一度同期してください。");
+  }
 
   // 差分取得の場合は既存データと突き合わせてマージ（同じIDは新しい方で上書き）
   const fetchedIds = new Set(fetchedMails.map(m => m.id));
@@ -1173,8 +1211,12 @@ export async function refreshReadStatus() {
   mails.forEach(mail => {
     if (readMap.has(mail.id)) {
       const latestRead = readMap.get(mail.id);
-      if (mail.read !== latestRead) {
-        mail.read = latestRead;
+      // このアプリに「未読に戻す」機能は無いため、read: false → true の一方向のみ反映する。
+      // ローカルで既に既読(true)になっているのに Supabase 側がまだ未読(false)なのは、
+      // markAsRead の更新がサーバーに届く前のタイムラグでしかなく、
+      // それをそのまま反映すると「既読にしたのにまた未読に戻る」という不具合になる。
+      if (latestRead && !mail.read) {
+        mail.read = true;
         changed = true;
       }
     }

@@ -57,8 +57,12 @@
     updateLoginUI();
 
     // まずキャッシュで即表示 → Supabaseの最新既読状態が届いたら差し替え
+    // （renderFoldersの再描画も同じ結果を使い回し、Supabaseへの問い合わせを1回にまとめる）
     loadTodayMails();
-    refreshReadStatus().then(() => loadTodayMails());
+    window.__readStatusRefreshed = refreshReadStatus().then(() => {
+      loadTodayMails();
+      if (window.renderFolders) window.renderFolders();
+    });
 
     function formatLastSynced() {
       const t = getLastSyncedAt();
@@ -126,7 +130,7 @@
 
   <!-- フォルダー一覧生成 -->
   <script type="module">
-    import { getFolderCounts, refreshReadStatus } from "./js/gmail.js";
+    import { getFolderCounts } from "./js/gmail.js";
 
     // フォルダー名 → 仕分けタブの色分類
     const FOLDER_TYPES = {
@@ -185,7 +189,8 @@
     };
 
     renderFolders();
-    refreshReadStatus().then(() => renderFolders());
+    // Supabaseへの問い合わせは上の既読状態取得スクリプトで1回だけ行い、
+    // その完了後にrenderFoldersを呼び直す（ここでは重ねて問い合わせない）
   </script>
 
   <!-- 直近3日以内の予定お知らせ -->

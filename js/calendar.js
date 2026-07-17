@@ -153,6 +153,32 @@ export function renderCalendar() {
 // ===============================
 // 詳細ポップアップ
 // ===============================
+function ensureDayDetailModal() {
+  let modal = document.getElementById("dayDetailModal");
+  if (modal) return modal;
+
+  modal = document.createElement("div");
+  modal.id = "dayDetailModal";
+  modal.className = "day-detail-overlay";
+  modal.innerHTML = `
+    <div class="day-detail-box">
+      <div class="day-detail-header">
+        <h3 id="dayDetailTitle"></h3>
+        <button type="button" id="dayDetailClose" class="day-detail-close" aria-label="閉じる">×</button>
+      </div>
+      <div id="dayDetailList" class="day-detail-list"></div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const close = () => { modal.style.display = "none"; };
+  modal.querySelector("#dayDetailClose").onclick = close;
+  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+
+  return modal;
+}
+
 window.openDetail = function(day) {
   const events = loadEvents();
 
@@ -167,7 +193,11 @@ window.openDetail = function(day) {
 
   if (dayEvents.length === 0) return;
 
-  let msg = `${currentYear}年${currentMonth + 1}月${day}日の予定\n\n`;
+  const modal = ensureDayDetailModal();
+  modal.querySelector("#dayDetailTitle").textContent = `${currentYear}年${currentMonth + 1}月${day}日の予定`;
+
+  const listEl = modal.querySelector("#dayDetailList");
+  listEl.innerHTML = "";
 
   dayEvents.forEach(ev => {
     const time = new Date(ev.datetime).toLocaleTimeString("ja-JP", {
@@ -175,12 +205,34 @@ window.openDetail = function(day) {
       minute: "2-digit"
     });
 
-    msg += `【${ev.category}】\n`;
-    msg += `${time}〜 ${ev.title}\n\n`;
+    const item = document.createElement("div");
+    item.className = "day-detail-item";
+    item.innerHTML = `
+      <span class="day-detail-category">【${escapeHtmlForDetail(ev.category)}】</span>
+      <span class="day-detail-time">${time}〜</span>
+      <span class="day-detail-item-title">${escapeHtmlForDetail(ev.title)}</span>
+    `;
+
+    // メール解析から自動登録された予定（sourceMailIdあり）はクリックで元メールへ飛べるようにする。
+    // 締切イベントは "{gmailId}-deadline" という形でIDを持っているため、元のGmail IDに戻す。
+    if (ev.sourceMailId) {
+      const mailId = ev.sourceMailId.replace(/-deadline$/, "");
+      item.classList.add("day-detail-item-clickable");
+      item.title = "クリックでメールを開く";
+      item.onclick = () => { location.href = `mail.html?id=${encodeURIComponent(mailId)}`; };
+    }
+
+    listEl.appendChild(item);
   });
 
-  alert(msg);
+  modal.style.display = "flex";
 };
+
+function escapeHtmlForDetail(str) {
+  const div = document.createElement("div");
+  div.textContent = str == null ? "" : String(str);
+  return div.innerHTML;
+}
 
 // ===============================
 // 削除

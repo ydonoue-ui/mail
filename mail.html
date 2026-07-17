@@ -60,6 +60,10 @@
 
       let badgesHtml = "";
 
+      if (mail.isSent) {
+        badgesHtml += `<span class="badge sent-badge">📤 送信済み</span>`;
+      }
+
       if (mail.format) {
         badgesHtml += `<span class="badge format-badge">${mail.format}</span>`;
       }
