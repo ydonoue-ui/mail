@@ -24,9 +24,10 @@
   <button onclick="manualSync()">今すぐメール同期</button>
   <button onclick="location.href='mails.html'">🔍 メールを検索</button>
   <button onclick="location.href='companies.html'">🏢 登録企業</button>
-  <button onclick="runReclassify()">🔁 振り分けを再判定</button>
-  <button onclick="runRepairBodies()">🩹 本文の文字化けを修復</button>
-  <button onclick="runSyncHealthCheck()">🩺 同期状況を確認</button>
+  <!-- メンテナンス用機能は画面には表示しない（ブラウザのコンソールから runReclassify() / runRepairBodies() / runSyncHealthCheck() として呼び出し可能） -->
+  <button onclick="runReclassify()" style="display:none">🔁 振り分けを再判定</button>
+  <button onclick="runRepairBodies()" style="display:none">🩹 本文の文字化けを修復</button>
+  <button onclick="runSyncHealthCheck()" style="display:none">🩺 同期状況を確認</button>
 
   <div class="sync-status">
     <span id="lastSyncedLabel"></span>
